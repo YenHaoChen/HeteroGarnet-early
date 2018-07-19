@@ -30,7 +30,9 @@
 
 #include "mem/ruby/network/garnet2.0/GarnetLink.hh"
 
+#include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/garnet2.0/CreditLink.hh"
+#include "mem/ruby/network/garnet2.0/NetworkBridge.hh"
 #include "mem/ruby/network/garnet2.0/NetworkLink.hh"
 
 GarnetIntLink::GarnetIntLink(const Params *p)
@@ -40,11 +42,38 @@ GarnetIntLink::GarnetIntLink(const Params *p)
 
     m_network_link = p->network_link;
     m_credit_link = p->credit_link;
+
+    srcCdcEn = p->src_cdc;
+    dstCdcEn = p->dst_cdc;
+
+    srcSerdesEn = p->src_serdes;
+    dstSerdesEn = p->dst_serdes;
+
+    srcBridgeEn = false;
+    dstBridgeEn = false;
+
+    if (srcCdcEn || srcSerdesEn) {
+        srcBridgeEn = true;
+    }
+    if (dstCdcEn || dstSerdesEn) {
+        dstBridgeEn = true;
+    }
+
+    srcNetBridge = p->src_net_bridge;
+    dstNetBridge = p->dst_net_bridge;
+
+    srcCredBridge = p->src_cred_bridge;
+    dstCredBridge = p->dst_cred_bridge;
+
 }
 
 void
 GarnetIntLink::init()
 {
+    srcNetBridge->init(srcCredBridge, srcCdcEn, srcSerdesEn);
+    dstNetBridge->init(dstCredBridge, dstCdcEn, dstSerdesEn);
+    srcCredBridge->init(srcNetBridge, srcCdcEn, srcSerdesEn);
+    dstCredBridge->init(dstNetBridge, dstCdcEn, dstSerdesEn);
 }
 
 void
@@ -71,11 +100,49 @@ GarnetExtLink::GarnetExtLink(const Params *p)
     // Out
     m_network_links[1] = p->network_links[1];
     m_credit_links[1] = p->credit_links[1];
+
+
+    extCdcEn = p->ext_cdc;
+    intCdcEn = p->int_cdc;
+
+    extSerdesEn = p->ext_serdes;
+    intSerdesEn = p->int_serdes;
+
+    extBridgeEn = false;
+    intBridgeEn = false;
+    if (extCdcEn || extSerdesEn) {
+        extBridgeEn = true;
+    }
+    if (intCdcEn || intSerdesEn) {
+        intBridgeEn = true;
+    }
+
+    intNetBridge[0] = p->int_net_bridge[0];
+    extNetBridge[0] = p->ext_net_bridge[0];
+
+    intNetBridge[1] = p->int_net_bridge[1];
+    extNetBridge[1] = p->ext_net_bridge[1];
+
+    intCredBridge[0] = p->int_cred_bridge[0];
+    extCredBridge[0] = p->ext_cred_bridge[0];
+
+    intCredBridge[1] = p->int_cred_bridge[1];
+    extCredBridge[1] = p->ext_cred_bridge[1];
+
 }
 
 void
 GarnetExtLink::init()
 {
+    extNetBridge[0]->init(extCredBridge[0], extCdcEn, extSerdesEn);
+    intNetBridge[0]->init(intCredBridge[0], intCdcEn, intSerdesEn);
+    extNetBridge[1]->init(extCredBridge[1], extCdcEn, extSerdesEn);
+    intNetBridge[1]->init(intCredBridge[1], intCdcEn, intSerdesEn);
+
+    extCredBridge[0]->init(extNetBridge[0], extCdcEn, extSerdesEn);
+    intCredBridge[0]->init(intNetBridge[0], intCdcEn, intSerdesEn);
+    extCredBridge[1]->init(extNetBridge[1], extCdcEn, extSerdesEn);
+    intCredBridge[1]->init(intNetBridge[1], intCdcEn, intSerdesEn);
 }
 
 void

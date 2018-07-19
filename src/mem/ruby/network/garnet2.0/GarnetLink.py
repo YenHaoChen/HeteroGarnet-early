@@ -39,10 +39,21 @@ class NetworkLink(ClockedObject):
                               "virtual channels per virtual network")
     virt_nets = Param.Int(Parent.number_of_virtual_networks,
                           "number of virtual networks")
+    supported_vnets = VectorParam.Int(Parent.supported_vnets,
+                                      "Vnets supported")
+    width = Param.UInt32(Parent.width, "bit-width of the link")
 
 class CreditLink(NetworkLink):
     type = 'CreditLink'
     cxx_header = "mem/ruby/network/garnet2.0/CreditLink.hh"
+
+class NetworkBridge(CreditLink):
+    type = 'NetworkBridge'
+    cxx_header = "mem/ruby/network/garnet2.0/NetworkBridge.hh"
+    link = Param.NetworkLink("Associated Network Link")
+    vtype = Param.Int(2, "Direction of CDC 0:LINK->OBJECT, 1:OBJECT->LINK")
+    serdes_latency = Param.Cycles(1, "Latency of SerDes Unit")
+    cdc_latency = Param.Cycles(1, "Latency of CDC Unit")
 
 # Interior fixed pipeline links between routers
 class GarnetIntLink(BasicIntLink):
@@ -52,6 +63,20 @@ class GarnetIntLink(BasicIntLink):
     # and one backward flow-control link (for credit)
     network_link = Param.NetworkLink(NetworkLink(), "forward link")
     credit_link  = Param.CreditLink(CreditLink(), "backward flow-control link")
+
+    src_cdc = Param.Bool(False, "Enable CDC")
+    dst_cdc = Param.Bool(False, "Enable CDC")
+
+    src_net_bridge = Param.NetworkBridge("Network CDC at source")
+    dst_net_bridge = Param.NetworkBridge("Network CDC at dest")
+    src_cred_bridge = Param.NetworkBridge("Credit CDC at source")
+    dst_cred_bridge = Param.NetworkBridge("Credit CDC at dest")
+
+    src_serdes = Param.Bool(False, "Enable CDC")
+    dst_serdes = Param.Bool(False, "Enable CDC")
+
+    width = Param.UInt32(Parent.ni_flit_size,
+                          "bit width supported by the router")
 
 # Exterior fixed pipeline links between a router and a controller
 class GarnetExtLink(BasicExtLink):
@@ -74,3 +99,17 @@ class GarnetExtLink(BasicExtLink):
     # Out uni-directional link
     _cls.append(CreditLink());
     credit_links = VectorParam.CreditLink(_cls, "backward flow-control links")
+
+    ext_cdc = Param.Bool(False, "Enable CDC")
+    int_cdc = Param.Bool(False, "Enable CDC")
+
+    ext_net_bridge = VectorParam.NetworkBridge("CDC to reach the consumers")
+    ext_cred_bridge = VectorParam.NetworkBridge("CDC to reach the consumers")
+    int_net_bridge = VectorParam.NetworkBridge("CDC to reach the consumers")
+    int_cred_bridge = VectorParam.NetworkBridge("CDC to reach the consumers")
+
+    ext_serdes = Param.Bool(False, "Enable CDC")
+    int_serdes = Param.Bool(False, "Enable CDC")
+
+    width = Param.UInt32(Parent.ni_flit_size,
+                          "bit width supported by the router")

@@ -32,7 +32,7 @@
 
 // Constructor for the flit
 flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
-    MsgPtr msg_ptr, Cycles curTime)
+    MsgPtr msg_ptr, int MsgSize, uint32_t bWidth, Tick curTime)
 {
     m_size = size;
     m_msg_ptr = msg_ptr;
@@ -44,7 +44,9 @@ flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
     m_vc = vc;
     m_route = route;
     m_stage.first = I_;
-    m_stage.second = m_time;
+    m_stage.second = curTime;
+    m_width = bWidth;
+    msgSize = MsgSize;
 
     if (size == 1) {
         m_type = HEAD_TAIL_;
@@ -56,6 +58,43 @@ flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
         m_type = TAIL_;
     else
         m_type = BODY_;
+}
+
+flit *
+flit::serialize(int ser_id, int parts, uint32_t bWidth)
+{
+    DPRINTF(RubyNetwork, "Serializing a flit\n");
+    assert(m_width > bWidth);
+
+    // Assuming all flits get broken into equal parts
+    int new_id = (m_id*parts) + ser_id;
+    int new_size = m_size*parts;
+
+    flit *fl = new flit(new_id, m_vc, m_vnet, m_route,
+                    new_size, m_msg_ptr, msgSize, bWidth, m_time);
+    fl->set_enqueue_time(m_enqueue_time);
+    fl->set_src_delay(src_delay);
+    return fl;
+}
+
+flit *
+flit::deserialize(int des_id, int num_flits, uint32_t bWidth)
+{
+    DPRINTF(RubyNetwork, "Deserializing a flit\n");
+    if ((m_type == HEAD_ || m_type == BODY_) &&
+       ((m_id + 1) % num_flits)) {
+        return NULL;
+    }
+
+    // Assuming all flits are joined into equal parts
+    int new_id = (int) floor(m_id/num_flits);
+    int new_size = (int) ceil(m_size/num_flits);
+
+    flit *fl = new flit(new_id, m_vc, m_vnet, m_route,
+                    new_size, m_msg_ptr, msgSize, bWidth, m_time);
+    fl->set_enqueue_time(m_enqueue_time);
+    fl->set_src_delay(src_delay);
+    return fl;
 }
 
 // Flit can be printed out for debugging purposes
@@ -72,6 +111,7 @@ flit::print(std::ostream& out) const
     out << "Dest NI=" << m_route.dest_ni << " ";
     out << "Dest Router=" << m_route.dest_router << " ";
     out << "Enqueue Time=" << m_enqueue_time << " ";
+    out << "Width=" << m_width<< " ";
     out << "]";
 }
 

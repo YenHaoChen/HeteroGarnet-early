@@ -68,9 +68,20 @@ class Consumer
         m_scheduled_wakeups.insert(time);
     }
 
-    void scheduleEventAbsolute(Tick timeAbs);
+    Cycles
+    getCurCycle()
+    {
+        return em->curCycle();
+    }
 
-  protected:
+    std::string
+    getName()
+    {
+        SimObject *sem = (SimObject *)em;
+        return sem->name();
+    }
+
+    void scheduleEventAbsolute(Tick timeAbs);
     void scheduleEvent(Cycles timeDelta);
 
   private:

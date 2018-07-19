@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2020 Advanced Micro Devices, Inc.
  * Copyright (c) 1999-2008 Mark D. Hill and David A. Wood
  * All rights reserved.
  *
@@ -48,11 +49,12 @@ const int INFINITE_LATENCY = 10000; // Yes, this is a big hack
 // the second m_nodes set of SwitchIDs represent the the output queues
 // of the network.
 
-Topology::Topology(uint32_t num_routers,
+Topology::Topology(uint32_t num_nodes, uint32_t num_routers,
+                   uint32_t num_vnets,
                    const vector<BasicExtLink *> &ext_links,
                    const vector<BasicIntLink *> &int_links)
     : m_nodes(MachineType_base_number(MachineType_NUM)),
-      m_number_of_switches(num_routers),
+      m_number_of_switches(num_routers), m_vnets(num_vnets),
       m_ext_link_vector(ext_links), m_int_link_vector(int_links)
 {
     // Total nodes/controllers in network
@@ -120,26 +122,60 @@ Topology::createLinks(Network *net)
     // Initialize weight, latency, and inter switched vectors
     int num_switches = max_switch_id+1;
     Matrix topology_weights(num_switches,
-            vector<int>(num_switches, INFINITE_LATENCY));
+            vector<vector<int>>(num_switches,
+            vector<int>(m_vnets, INFINITE_LATENCY)));
     Matrix component_latencies(num_switches,
-            vector<int>(num_switches, -1));
+            vector<vector<int>>(num_switches,
+            vector<int>(m_vnets, -1)));
     Matrix component_inter_switches(num_switches,
-            vector<int>(num_switches, 0));
+            vector<vector<int>>(num_switches,
+            vector<int>(m_vnets, 0)));
 
     // Set identity weights to zero
     for (int i = 0; i < topology_weights.size(); i++) {
-        topology_weights[i][i] = 0;
+        for (int v = 0; v < m_vnets; v++) {
+            topology_weights[i][i][v] = 0;
+        }
     }
 
     // Fill in the topology weights and bandwidth multipliers
     for (LinkMap::const_iterator i = m_link_map.begin();
          i != m_link_map.end(); ++i) {
         std::pair<int, int> src_dest = (*i).first;
-        BasicLink* link = (*i).second.link;
+        bool vnet_done[m_vnets] = { 0 };
         int src = src_dest.first;
         int dst = src_dest.second;
-        component_latencies[src][dst] = link->m_latency;
-        topology_weights[src][dst] = link->m_weight;
+
+        // Iterate over all links for this source and destination
+        for (int l = 0; l < (*i).second.size(); l++) {
+            BasicLink* link = (*i).second[l].link;
+            assert(link->mVnets.size());
+            assert(link->mVnets.size() < m_vnets);
+            if (link->mVnets[0] == -1) {
+                for (int v = 0; v < m_vnets; v++) {
+                    // Two links connecting same src and destination
+                    // cannot carry same vnets.
+                    fatal_if(vnet_done[v], "Two links connecting same src"
+                    " and destination cannot support same vnets");
+
+                    component_latencies[src][dst][v] = link->m_latency;
+                    topology_weights[src][dst][v] = link->m_weight;
+                    vnet_done[v] = true;
+                }
+            } else {
+                for (int v = 0; v < link->mVnets.size(); v++) {
+                    int vnet = link->mVnets[v];
+                    // Two links connecting same src and destination
+                    // cannot carry same vnets.
+                    fatal_if(vnet_done[v], "Two links connecting same src"
+                    " and destination cannot support same vnets");
+
+                    component_latencies[src][dst][vnet] = link->m_latency;
+                    topology_weights[src][dst][vnet] = link->m_weight;
+                    vnet_done[vnet] = true;
+                }
+            }
+        }
     }
 
     // Walk topology and hookup the links
@@ -148,11 +184,27 @@ Topology::createLinks(Network *net)
 
     for (int i = 0; i < topology_weights.size(); i++) {
         for (int j = 0; j < topology_weights[i].size(); j++) {
-            int weight = topology_weights[i][j];
-            if (weight > 0 && weight != INFINITE_LATENCY) {
-                NetDest destination_set =
-                        shortest_path_to_node(i, j, topology_weights, dist);
-                makeLink(net, i, j, destination_set);
+            std::vector<NetDest> routingMap;
+            routingMap.resize(m_vnets);
+
+            // Not all sources and destinations are connected
+            // by direct links. We only construct the links
+            // which have been configured in topology.
+            bool realLink = false;
+
+            for (int v = 0; v < m_vnets; v++) {
+                int weight = topology_weights[i][j][v];
+                if (weight > 0 && weight != INFINITE_LATENCY) {
+                    realLink = true;
+                    routingMap[v] =
+                        shortest_path_to_node(i, j, topology_weights, dist, v);
+                }
+            }
+            // Make one link for each set of vnets between
+            // a given source and destination. We do not
+            // want to create one link for each vnet.
+            if (realLink) {
+                makeLink(net, i, j, routingMap);
             }
         }
     }
@@ -167,19 +219,33 @@ Topology::addLink(SwitchID src, SwitchID dest, BasicLink* link,
     assert(dest <= m_number_of_switches+m_nodes+m_nodes);
 
     std::pair<int, int> src_dest_pair;
-    LinkEntry link_entry;
-
     src_dest_pair.first = src;
     src_dest_pair.second = dest;
+    LinkEntry link_entry;
+
     link_entry.link = link;
     link_entry.src_outport_dirn = src_outport_dirn;
     link_entry.dst_inport_dirn  = dst_inport_dirn;
-    m_link_map[src_dest_pair] = link_entry;
+
+    auto lit = m_link_map.find(src_dest_pair);
+    if (lit != m_link_map.end()) {
+        // Garnet 2.0 allows multiple links between
+        // same source-destination pair supporting
+        // different vnets. If there is a link already
+        // between a given pair of source and destination
+        // add this new link to it.
+        lit->second.push_back(link_entry);
+    } else {
+        std::vector<LinkEntry> links;
+        links.resize(1);
+        links[0] = link_entry;
+        m_link_map[src_dest_pair] = links;
+    }
 }
 
 void
 Topology::makeLink(Network *net, SwitchID src, SwitchID dest,
-                   const NetDest& routing_table_entry)
+                   std::vector<NetDest>& routing_table_entry)
 {
     // Make sure we're not trying to connect two end-point nodes
     // directly together
@@ -191,27 +257,73 @@ Topology::makeLink(Network *net, SwitchID src, SwitchID dest,
     if (src < m_nodes) {
         src_dest.first = src;
         src_dest.second = dest;
-        link_entry = m_link_map[src_dest];
-        net->makeExtInLink(src, dest - (2 * m_nodes), link_entry.link,
-                        routing_table_entry);
+        std::vector<LinkEntry> links = m_link_map[src_dest];
+        for (int l = 0; l < links.size(); l++) {
+            link_entry = links[l];
+            std::vector<NetDest> linkRoute;
+            linkRoute.resize(m_vnets);
+            BasicLink *link = link_entry.link;
+            if (link->mVnets[0] == -1) {
+                net->makeExtInLink(src, dest - (2 * m_nodes), link,
+                                routing_table_entry);
+            } else {
+                for (int v = 0; v< link->mVnets.size(); v++) {
+                    int vnet = link->mVnets[v];
+                    linkRoute[vnet] = routing_table_entry[vnet];
+                }
+                net->makeExtInLink(src, dest - (2 * m_nodes), link,
+                                linkRoute);
+            }
+        }
     } else if (dest < 2*m_nodes) {
         assert(dest >= m_nodes);
         NodeID node = dest - m_nodes;
         src_dest.first = src;
         src_dest.second = dest;
-        link_entry = m_link_map[src_dest];
-        net->makeExtOutLink(src - (2 * m_nodes), node, link_entry.link,
-                         routing_table_entry);
+        std::vector<LinkEntry> links = m_link_map[src_dest];
+        for (int l = 0; l < links.size(); l++) {
+            link_entry = links[l];
+            std::vector<NetDest> linkRoute;
+            linkRoute.resize(m_vnets);
+            BasicLink *link = link_entry.link;
+            if (link->mVnets[0] == -1) {
+                net->makeExtOutLink(src - (2 * m_nodes), node, link,
+                                 routing_table_entry);
+            } else {
+                for (int v = 0; v< link->mVnets.size(); v++) {
+                    int vnet = link->mVnets[v];
+                    linkRoute[vnet] = routing_table_entry[vnet];
+                }
+                net->makeExtOutLink(src - (2 * m_nodes), node, link,
+                                linkRoute);
+            }
+        }
     } else {
         assert((src >= 2 * m_nodes) && (dest >= 2 * m_nodes));
         src_dest.first = src;
         src_dest.second = dest;
-        link_entry = m_link_map[src_dest];
-        net->makeInternalLink(src - (2 * m_nodes), dest - (2 * m_nodes),
-                              link_entry.link,
-                              routing_table_entry,
+        std::vector<LinkEntry> links = m_link_map[src_dest];
+        for (int l = 0; l < links.size(); l++) {
+            link_entry = links[l];
+            std::vector<NetDest> linkRoute;
+            linkRoute.resize(m_vnets);
+            BasicLink *link = link_entry.link;
+            if (link->mVnets[0] == -1) {
+                net->makeInternalLink(src - (2 * m_nodes),
+                              dest - (2 * m_nodes), link, routing_table_entry,
                               link_entry.src_outport_dirn,
                               link_entry.dst_inport_dirn);
+            } else {
+                for (int v = 0; v< link->mVnets.size(); v++) {
+                    int vnet = link->mVnets[v];
+                    linkRoute[vnet] = routing_table_entry[vnet];
+                }
+                net->makeInternalLink(src - (2 * m_nodes),
+                              dest - (2 * m_nodes), link, linkRoute,
+                              link_entry.src_outport_dirn,
+                              link_entry.dst_inport_dirn);
+            }
+        }
     }
 }
 
@@ -221,34 +333,40 @@ void
 Topology::extend_shortest_path(Matrix &current_dist, Matrix &latencies,
     Matrix &inter_switches)
 {
-    bool change = true;
     int nodes = current_dist.size();
 
-    while (change) {
-        change = false;
-        for (int i = 0; i < nodes; i++) {
-            for (int j = 0; j < nodes; j++) {
-                int minimum = current_dist[i][j];
-                int previous_minimum = minimum;
-                int intermediate_switch = -1;
-                for (int k = 0; k < nodes; k++) {
-                    minimum = min(minimum,
-                        current_dist[i][k] + current_dist[k][j]);
-                    if (previous_minimum != minimum) {
-                        intermediate_switch = k;
-                        inter_switches[i][j] =
-                            inter_switches[i][k] +
-                            inter_switches[k][j] + 1;
+    // We find the shortest path for each vnet for a given pair of
+    // source and destinations. This is done simply by traversing via
+    // all other nodes and finding the minimum distance.
+    for (int v = 0; v < m_vnets; v++) {
+        bool change = true;
+        while (change) {
+            change = false;
+            for (int i = 0; i < nodes; i++) {
+                for (int j = 0; j < nodes; j++) {
+                    int minimum = current_dist[i][j][v];
+                    int previous_minimum = minimum;
+                    int intermediate_switch = -1;
+                    for (int k = 0; k < nodes; k++) {
+                        minimum = min(minimum,
+                            current_dist[i][k][v] + current_dist[k][j][v]);
+                        if (previous_minimum != minimum) {
+                            intermediate_switch = k;
+                            inter_switches[i][j][v] =
+                                inter_switches[i][k][v] +
+                                inter_switches[k][j][v] + 1;
+                        }
+                        previous_minimum = minimum;
                     }
-                    previous_minimum = minimum;
-                }
-                if (current_dist[i][j] != minimum) {
-                    change = true;
-                    current_dist[i][j] = minimum;
-                    assert(intermediate_switch >= 0);
-                    assert(intermediate_switch < latencies[i].size());
-                    latencies[i][j] = latencies[i][intermediate_switch] +
-                        latencies[intermediate_switch][j];
+                    if (current_dist[i][j][v] != minimum) {
+                        change = true;
+                        current_dist[i][j][v] = minimum;
+                        assert(intermediate_switch >= 0);
+                        assert(intermediate_switch < latencies[i].size());
+                        latencies[i][j][v] =
+                            latencies[i][intermediate_switch][v] +
+                            latencies[intermediate_switch][j][v];
+                    }
                 }
             }
         }
@@ -267,14 +385,16 @@ Topology::shortest_path(const Matrix &weights, Matrix &latencies,
 bool
 Topology::link_is_shortest_path_to_node(SwitchID src, SwitchID next,
                                         SwitchID final, const Matrix &weights,
-                                        const Matrix &dist)
+                                        const Matrix &dist, int vnet)
 {
-    return weights[src][next] + dist[next][final] == dist[src][final];
+    return weights[src][next][vnet] + dist[next][final][vnet] ==
+        dist[src][final][vnet];
 }
 
 NetDest
 Topology::shortest_path_to_node(SwitchID src, SwitchID next,
-                                const Matrix &weights, const Matrix &dist)
+                                const Matrix &weights, const Matrix &dist,
+                                int vnet)
 {
     NetDest result;
     int d = 0;
@@ -292,7 +412,7 @@ Topology::shortest_path_to_node(SwitchID src, SwitchID next,
             //  2*MachineType_base_number(MachineType_NUM)-1] for the
             // component network
             if (link_is_shortest_path_to_node(src, next, d + max_machines,
-                    weights, dist)) {
+                    weights, dist, vnet)) {
                 MachineID mach = {(MachineType)m, i};
                 result.add(mach);
             }
@@ -302,9 +422,9 @@ Topology::shortest_path_to_node(SwitchID src, SwitchID next,
 
     DPRINTF(RubyNetwork, "Returning shortest path\n"
             "(src-(2*max_machines)): %d, (next-(2*max_machines)): %d, "
-            "src: %d, next: %d, result: %s\n",
+            "src: %d, next: %d, vnet:%d result: %s\n",
             (src-(2*max_machines)), (next-(2*max_machines)),
-            src, next, result);
+            src, next, vnet, result);
 
     return result;
 }

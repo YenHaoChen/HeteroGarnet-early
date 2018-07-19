@@ -51,3 +51,4 @@ class RubyNetwork(ClockedObject):
 
     slave = VectorSlavePort("CPU slave port")
     master = VectorMasterPort("CPU master port")
+    domains = VectorParam.SrcClockDomain([], "list of domains in Network")

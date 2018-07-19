@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2020 Advanced Micro Devices, Inc.
  * Copyright (c) 2020 Inria
  * Copyright (c) 2016 Georgia Institute of Technology
  * Copyright (c) 2008 Princeton University
@@ -36,11 +37,19 @@
 NetworkLink::NetworkLink(const Params *p)
     : ClockedObject(p), Consumer(this), m_id(p->link_id),
       m_type(NUM_LINK_TYPES_),
-      m_latency(p->link_latency),
+      m_latency(p->link_latency), m_link_utilized(0),
+      m_vc_load(p->vcs_per_vnet * p->virt_nets),
       linkBuffer(), link_consumer(nullptr),
-      link_srcQueue(nullptr), m_link_utilized(0),
-      m_vc_load(p->vcs_per_vnet * p->virt_nets)
+      link_srcQueue(nullptr)
 {
+    int num_vnets = (p->supported_vnets).size();
+    assert(num_vnets > 0);
+    mVnets.resize(num_vnets);
+    bitWidth = p->width;
+    for (int i = 0; i < num_vnets; i++) {
+        mVnets[i] = p->supported_vnets[i];
+    }
+    DPRINTF(RubyNetwork,"Created with bitwidth:%d\n", bitWidth);
 }
 
 void
@@ -50,22 +59,39 @@ NetworkLink::setLinkConsumer(Consumer *consumer)
 }
 
 void
-NetworkLink::setSourceQueue(flitBuffer* src_queue)
+NetworkLink::setSourceQueue(flitBuffer *src_queue, ClockedObject *srcClockObj)
 {
     link_srcQueue = src_queue;
+    src_object = srcClockObj;
 }
 
 void
 NetworkLink::wakeup()
 {
+    DPRINTF(RubyNetwork, "Woke up to transfer from %s to %s\n",
+    src_object->name(), link_consumer->getName());
     assert(link_srcQueue != nullptr);
-    if (link_srcQueue->isReady(curCycle())) {
+    assert(curTick() == clockEdge());
+    if (link_srcQueue->isReady(curTick())) {
         flit *t_flit = link_srcQueue->getTopFlit();
-        t_flit->set_time(curCycle() + m_latency);
+        if (m_type != NUM_LINK_TYPES_) {
+            // Only for assertions and debug messages
+            DPRINTF(RubyNetwork, "Transmitting at %ld :%s\n",
+                clockEdge(m_latency), *t_flit);
+            assert(t_flit->m_width == bitWidth);
+            assert((std::find(mVnets.begin(), mVnets.end(),
+                t_flit->get_vnet()) != mVnets.end()) ||
+                (std::find(mVnets.begin(), mVnets.end(), -1) != mVnets.end()));
+        }
+        t_flit->set_time(clockEdge(m_latency));
         linkBuffer.insert(t_flit);
         link_consumer->scheduleEventAbsolute(clockEdge(m_latency));
         m_link_utilized++;
         m_vc_load[t_flit->get_vc()]++;
+    }
+
+    if (!link_srcQueue->isEmpty()) {
+        scheduleEvent(Cycles(1));;
     }
 }
 

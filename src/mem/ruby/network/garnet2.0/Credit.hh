@@ -34,7 +34,9 @@
 #include <cassert>
 #include <iostream>
 
+#include "base/trace.hh"
 #include "base/types.hh"
+#include "debug/RubyNetwork.hh"
 #include "mem/ruby/network/garnet2.0/CommonTypes.hh"
 #include "mem/ruby/network/garnet2.0/flit.hh"
 
@@ -46,7 +48,13 @@ class Credit : public flit
 {
   public:
     Credit() {};
-    Credit(int vc, bool is_free_signal, Cycles curTime);
+    Credit(int vc, bool is_free_signal, Tick curTime);
+
+    // Functions used by SerDes
+    flit* serialize(int ser_id, int parts, uint32_t bWidth);
+    flit* deserialize(int des_id, int num_flits, uint32_t bWidth);
+
+    ~Credit() {};
 
     bool is_free_signal() { return m_is_free_signal; }
 
