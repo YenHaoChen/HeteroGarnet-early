@@ -81,6 +81,13 @@ class Consumer
         return sem->name();
     }
 
+    ClockedObject *
+    getObject()
+    {
+        return em;
+    }
+
+
     void scheduleEventAbsolute(Tick timeAbs);
     void scheduleEvent(Cycles timeDelta);
 

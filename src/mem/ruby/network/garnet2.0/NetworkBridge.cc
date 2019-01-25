@@ -96,7 +96,7 @@ NetworkBridge::scheduleFlit(flit *t_flit, Cycles latency)
         totLatency = latency + cdcLatency;
     }
 
-    t_flit->set_time(clockEdge(totLatency));
+    t_flit->set_time(link_consumer->getObject()->clockEdge(totLatency));
     linkBuffer.insert(t_flit);
     link_consumer->scheduleEvent(totLatency);
 }
