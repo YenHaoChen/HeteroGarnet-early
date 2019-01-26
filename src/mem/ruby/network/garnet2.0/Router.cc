@@ -96,8 +96,9 @@ Router::addInPort(PortDirection inport_dirn,
     DPRINTF(RubyNetwork, "%d == %d? %s\n", in_link->bitWidth,
             m_bit_width, in_link->name());
 
-    fatal_if(in_link->bitWidth != m_bit_width, "Widths of units do not match."
-            " Consider inserting SerDes Units");
+    fatal_if(in_link->bitWidth != m_bit_width, "Widths of link %s(%d)does"
+            " not match that of Router%d(%d). Consider inserting SerDes "
+            "Units.", in_link->name(), in_link->bitWidth, m_id, m_bit_width);
 
     int port_num = m_input_unit.size();
     InputUnit *input_unit = new InputUnit(port_num, inport_dirn, this);

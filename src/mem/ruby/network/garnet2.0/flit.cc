@@ -63,7 +63,6 @@ flit::flit(int id, int  vc, int vnet, RouteInfo route, int size,
 flit *
 flit::serialize(int ser_id, int parts, uint32_t bWidth)
 {
-    DPRINTF(RubyNetwork, "Serializing a flit\n");
     assert(m_width > bWidth);
 
     // Assuming all flits get broken into equal parts
@@ -80,15 +79,14 @@ flit::serialize(int ser_id, int parts, uint32_t bWidth)
 flit *
 flit::deserialize(int des_id, int num_flits, uint32_t bWidth)
 {
-    DPRINTF(RubyNetwork, "Deserializing a flit\n");
     if ((m_type == HEAD_ || m_type == BODY_) &&
        ((m_id + 1) % num_flits)) {
         return NULL;
     }
 
     // Assuming all flits are joined into equal parts
-    int new_id = (int) floor(m_id/num_flits);
-    int new_size = (int) ceil(m_size/num_flits);
+    int new_id = (int) floor((float)m_id/(float)num_flits);
+    int new_size = (int) ceil((float)m_size/(float)num_flits);
 
     flit *fl = new flit(new_id, m_vc, m_vnet, m_route,
                     new_size, m_msg_ptr, msgSize, bWidth, m_time);
@@ -104,6 +102,7 @@ flit::print(std::ostream& out) const
     out << "[flit:: ";
     out << "Id=" << m_id << " ";
     out << "Type=" << m_type << " ";
+    out << "Size=" << m_size << " ";
     out << "Vnet=" << m_vnet << " ";
     out << "VC=" << m_vc << " ";
     out << "Src NI=" << m_route.src_ni << " ";

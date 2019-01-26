@@ -113,15 +113,15 @@ NetworkBridge::flitisizeAndSend(flit *t_flit)
     // Serialize-Deserialize only if it is enabled
     if (enSerDes) {
         // Calculate the target-width
-        uint32_t target_width = bitWidth;
-        uint32_t cur_width = nLink->bitWidth;
+        int target_width = bitWidth;
+        int cur_width = nLink->bitWidth;
         if (mType == TO_LINK_) {
             target_width = nLink->bitWidth;
             cur_width = bitWidth;
         }
 
-        DPRINTF(RubyNetwork, "Target width: %d Current: %d Native: %d\n",
-            target_width, cur_width, bitWidth);
+        DPRINTF(RubyNetwork, "Target width: %d Current: %d\n",
+            target_width, cur_width);
         assert(target_width != cur_width);
 
         int vc = t_flit->get_vc();
@@ -134,12 +134,17 @@ NetworkBridge::flitisizeAndSend(flit *t_flit)
             int num_flits = 0;
             if (t_flit->get_type() == CREDIT_) {
                 num_flits = (int)ceil((float)target_width/(float)cur_width);
+            } else if (t_flit->get_type() == TAIL_ ||
+                       t_flit->get_type() == HEAD_TAIL_) {
+                num_flits = 1;
             } else {
-                num_flits = (int)ceil((float)t_flit->msgSize/(float)cur_width);
+                num_flits = (int)ceil((float)std::min(t_flit->msgSize,
+                                       target_width)/(float)cur_width);
             }
             assert(num_flits > 0);
 
-            DPRINTF(RubyNetwork, "Deserialize :%d -----> %d num:%d vc:%d\n",
+            DPRINTF(RubyNetwork, "Deserialize :%d -----> %d "
+                "num-flits-needed:%d vc:%d\n",
                 cur_width, target_width, num_flits, vc);
 
             // lenBuffer acts as the buffer for deserialization
@@ -154,6 +159,7 @@ NetworkBridge::flitisizeAndSend(flit *t_flit)
 
             // Schedule only if we are done deserializing
             if (fl) {
+                DPRINTF(RubyNetwork, "Scheduling a flit\n");
                 lenBuffer[vc] = 0;
                 scheduleFlit(fl, serDesLatency);
             }
@@ -161,8 +167,9 @@ NetworkBridge::flitisizeAndSend(flit *t_flit)
             delete t_flit;
         } else {
             // Serialize
-            DPRINTF(RubyNetwork, "Serialize :%d -----> %d vc:%d\n",
-                cur_width, target_width);
+            DPRINTF(RubyNetwork, "Serializing flit :%d -----> %d "
+            "(vc:%d, Original Message Size: %d)\n",
+                cur_width, target_width, vc, t_flit->msgSize);
 
             int num_parts = 0;
             if (t_flit->get_type() == CREDIT_) {
@@ -170,11 +177,12 @@ NetworkBridge::flitisizeAndSend(flit *t_flit)
                 num_parts = extraCredit[vc].front();
                 extraCredit[vc].pop();
             } else {
-                num_parts = (int)ceil((float)t_flit->msgSize/
+                num_parts = (int)ceil((float)cur_width/
                             (float)target_width);
             }
             assert(num_parts > 0);
 
+            DPRINTF(RubyNetwork, "Serialized into %d parts\n", num_parts);
             // Schedule all the flits
             // num_flits could be zero for credits
             for (int i = 0; i < num_parts; i++) {
@@ -201,6 +209,7 @@ NetworkBridge::wakeup()
 
     if (link_srcQueue->isReady(curTick())) {
         t_flit = link_srcQueue->getTopFlit();
+        DPRINTF(RubyNetwork, "Recieved flit %s\n", *t_flit);
         flitisizeAndSend(t_flit);
         return;
     }

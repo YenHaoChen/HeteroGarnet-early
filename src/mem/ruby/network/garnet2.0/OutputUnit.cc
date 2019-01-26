@@ -51,12 +51,11 @@ OutputUnit::OutputUnit(int id, PortDirection direction, Router *router)
 void
 OutputUnit::decrement_credit(int out_vc)
 {
-    DPRINTF(RubyNetwork, "Router %d OutputUnit %d decrementing credit:%d for "
-            "outvc %d at time: %lld for %s\n",
-            m_router->get_id(), m_id,
-            outVcState[out_vc].get_credit_count(),
-            out_vc, m_router->curCycle(),
-            m_credit_link->name());
+    DPRINTF(RubyNetwork, "Router %d OutputUnit %s decrementing credit:%d for "
+            "outvc %d at time: %lld for %s\n", m_router->get_id(),
+            m_router->getPortDirectionName(get_direction()),
+            outVcState[out_vc]->get_credit_count(),
+            out_vc, m_router->curCycle(), m_credit_link->name());
 
     outVcState[out_vc].decrement_credit();
 }
@@ -64,11 +63,11 @@ OutputUnit::decrement_credit(int out_vc)
 void
 OutputUnit::increment_credit(int out_vc)
 {
-    DPRINTF(RubyNetwork, "Router %d OutputUnit %d incrementing credit:%d for "
-            "outvc %d at time: %lld from:%s\n",
-            m_router->get_id(), m_id, outVcState[out_vc].get_credit_count(),
-            out_vc, m_router->curCycle(),
-            m_credit_link->name());
+    DPRINTF(RubyNetwork, "Router %d OutputUnit %s incrementing credit:%d for "
+            "outvc %d at time: %lld from:%s\n", m_router->get_id(),
+            m_router->getPortDirectionName(get_direction()),
+            outVcState[out_vc]->get_credit_count(),
+            out_vc, m_router->curCycle(), m_credit_link->name());
 
     outVcState[out_vc].increment_credit();
 }
