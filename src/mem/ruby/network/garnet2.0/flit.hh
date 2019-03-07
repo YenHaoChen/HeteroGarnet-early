@@ -73,7 +73,7 @@ class flit
     void set_enqueue_time(Tick time) { m_enqueue_time = time; }
 
     void increment_hops() { m_route.hops_traversed++; }
-    void print(std::ostream& out) const;
+    virtual void print(std::ostream& out) const;
 
     bool
     is_stage(flit_stage stage, Tick time)

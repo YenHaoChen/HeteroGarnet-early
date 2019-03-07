@@ -65,9 +65,10 @@ flit::serialize(int ser_id, int parts, uint32_t bWidth)
 {
     assert(m_width > bWidth);
 
-    // Assuming all flits get broken into equal parts
-    int new_id = (m_id*parts) + ser_id;
-    int new_size = m_size*parts;
+    int ratio = (int)ceil(m_width/bWidth);
+    int new_id = (m_id*ratio) + ser_id;
+    int new_size = (int)ceil((float)msgSize/(float)bWidth);
+    assert(new_id < new_size);
 
     flit *fl = new flit(new_id, m_vc, m_vnet, m_route,
                     new_size, m_msg_ptr, msgSize, bWidth, m_time);
@@ -79,14 +80,10 @@ flit::serialize(int ser_id, int parts, uint32_t bWidth)
 flit *
 flit::deserialize(int des_id, int num_flits, uint32_t bWidth)
 {
-    if ((m_type == HEAD_ || m_type == BODY_) &&
-       ((m_id + 1) % num_flits)) {
-        return NULL;
-    }
-
-    // Assuming all flits are joined into equal parts
-    int new_id = (int) floor((float)m_id/(float)num_flits);
-    int new_size = (int) ceil((float)m_size/(float)num_flits);
+    int ratio = (int)ceil((float)bWidth/(float)m_width);
+    int new_id = ((int)ceil((float)(m_id+1)/(float)ratio)) - 1;
+    int new_size = (int) ceil((float)msgSize/(float)bWidth);
+    assert(new_id < new_size);
 
     flit *fl = new flit(new_id, m_vc, m_vnet, m_route,
                     new_size, m_msg_ptr, msgSize, bWidth, m_time);
@@ -109,7 +106,7 @@ flit::print(std::ostream& out) const
     out << "Src Router=" << m_route.src_router << " ";
     out << "Dest NI=" << m_route.dest_ni << " ";
     out << "Dest Router=" << m_route.dest_router << " ";
-    out << "Enqueue Time=" << m_enqueue_time << " ";
+    out << "Set Time=" << m_time << " ";
     out << "Width=" << m_width<< " ";
     out << "]";
 }

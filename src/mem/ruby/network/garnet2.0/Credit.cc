@@ -63,10 +63,20 @@ Credit::deserialize(int des_id, int num_flits, uint32_t bWidth)
         // So send a credit in any case
         return new Credit(m_vc, true, m_time);
     }
-    if (des_id % num_flits) {
-        return NULL;
-    }
 
     return new Credit(m_vc, false, m_time);
 }
+
+void
+Credit::print(std::ostream& out) const
+{
+    out << "[Credit:: ";
+    out << "Type=" << m_type << " ";
+    out << "VC=" << m_vc << " ";
+    out << "FreeVC=" << m_is_free_signal << " ";
+    out << "Set Time=" << m_time << " ";
+    out << "]";
+}
+
+
 

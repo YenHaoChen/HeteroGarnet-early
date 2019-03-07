@@ -89,8 +89,12 @@ class NetworkBridge: public CreditLink
     Cycles cdcLatency;
     Cycles serDesLatency;
 
+    Tick lastScheduledAt;
+
     // Used by Credit Deserializer
     std::vector<int> lenBuffer;
+    std::vector<int> sizeSent;
+    std::vector<int> flitsSent;
     std::vector<std::queue<int>> extraCredit;
 
 };
