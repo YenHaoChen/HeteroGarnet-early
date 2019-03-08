@@ -47,6 +47,11 @@ enum bridge_type {FROM_LINK_, TO_LINK_, NUM_CDC_TYPE_};
 
 struct RouteInfo
 {
+    RouteInfo()
+        : vnet(0), src_ni(0), src_router(0), dest_ni(0), dest_router(0),
+          hops_traversed(0)
+    {}
+
     // destination format for table-based routing
     int vnet;
     NetDest net_dest;
