@@ -69,7 +69,8 @@ class Router : public BasicRouter, public Consumer
                    CreditLink *credit_link);
     void addOutPort(PortDirection outport_dirn, NetworkLink *link,
                     std::vector<NetDest>& routing_table_entry,
-                    int link_weight, CreditLink *credit_link);
+                    int link_weight, CreditLink *credit_link,
+                    uint32_t consumerVcs);
 
     Cycles get_pipe_stages(){ return m_latency; }
     int get_num_vcs()       { return m_num_vcs; }

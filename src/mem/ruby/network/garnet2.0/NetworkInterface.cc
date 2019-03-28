@@ -46,32 +46,19 @@ using namespace std;
 
 NetworkInterface::NetworkInterface(const Params *p)
   : ClockedObject(p), Consumer(this), m_id(p->id),
-    m_virtual_networks(p->virt_nets), m_vc_per_vnet(p->vcs_per_vnet),
-    m_router_id(-1), m_vc_allocator(m_virtual_networks, 0),
+    m_virtual_networks(p->virt_nets), m_vc_per_vnet(0),
+    m_vc_allocator(m_virtual_networks, 0),
     m_vc_round_robin(0),
     m_deadlock_threshold(p->garnet_deadlock_threshold),
     vc_busy_counter(m_virtual_networks, 0)
 {
-    const int num_vcs = m_vc_per_vnet * m_virtual_networks;
-    niOutVcs.resize(num_vcs);
-    m_ni_out_vcs_enqueue_time.resize(num_vcs);
-
-    // instantiating the NI flit buffers
-    for (auto& time : m_ni_out_vcs_enqueue_time) {
-        time = Tick(INFINITE_);
-    }
-
     m_stall_count.resize(m_virtual_networks);
 }
 
 void
 NetworkInterface::init()
 {
-    const int num_vcs = m_vc_per_vnet * m_virtual_networks;
-    outVcState.reserve(num_vcs);
-    for (int i = 0; i < num_vcs; i++) {
-        outVcState.emplace_back(i, m_net_ptr);
-    }
+    return;
 }
 
 void
@@ -85,22 +72,57 @@ NetworkInterface::addInPort(NetworkLink *in_link,
 
     in_link->setLinkConsumer(this);
     credit_link->setSourceQueue(newInPort->outCreditQueue(), this);
+    if (m_vc_per_vnet != 0) {
+        in_link->setVcsPerVnet(m_vc_per_vnet);
+        credit_link->setVcsPerVnet(m_vc_per_vnet);
+    }
 
 }
 
 void
 NetworkInterface::addOutPort(NetworkLink *out_link,
                              CreditLink *credit_link,
-                             SwitchID router_id)
+                             SwitchID router_id, uint32_t consumerVcs)
 {
     OutputPort *newOutPort = new OutputPort(out_link, credit_link, router_id);
     outPorts.push_back(newOutPort);
+
+    assert(consumerVcs > 0);
+    // We are not allowing different physical links to have different vcs
+    // If it is required that the Network Interface support different VCs
+    // for every physical link connected to it. Then they need to change
+    // the logic within outport and inport.
+    if (m_num_vcs == 0) {
+        m_vc_per_vnet = consumerVcs;
+        m_num_vcs = consumerVcs * m_virtual_networks;
+        niOutVcs.resize(m_num_vcs);
+        outVcState.reserve(m_num_vcs);
+        m_ni_out_vcs_enqueue_time.resize(m_num_vcs);
+        // instantiating the NI flit buffers
+        for (int i = 0; i < m_num_vcs; i++) {
+            m_ni_out_vcs_enqueue_time[i] = Tick(INFINITE_);
+            outVcState.emplace_back(i, m_net_ptr, consumerVcs);
+        }
+
+        // Reset VC Per VNET for input links already instantiated
+        for (auto &iPort: inPorts) {
+            NetworkLink *inNetLink = iPort->inNetLink();
+            inNetLink->setVcsPerVnet(m_vc_per_vnet);
+            credit_link->setVcsPerVnet(m_vc_per_vnet);
+        }
+    } else {
+        fatal_if(consumerVcs != m_vc_per_vnet,
+        "%s: Connected Physical links have different vc requests: %d and %d\n",
+        name(), consumerVcs, m_vc_per_vnet);
+    }
 
     DPRINTF(RubyNetwork, "OutputPort:%s Vnet: %s\n",
     out_link->name(), newOutPort->printVnets());
 
     out_link->setSourceQueue(newOutPort->outFlitQueue(), this);
+    out_link->setVcsPerVnet(m_vc_per_vnet);
     credit_link->setLinkConsumer(this);
+    credit_link->setVcsPerVnet(m_vc_per_vnet);
 }
 
 void
