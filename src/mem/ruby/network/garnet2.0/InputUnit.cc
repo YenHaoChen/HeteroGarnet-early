@@ -127,7 +127,7 @@ InputUnit::wakeup()
         }
 
         if (m_in_link->isReady(curTick())) {
-            scheduleEvent(Cycles(1));
+            m_router->schedule_wakeup(Cycles(1));
         }
     }
 }
