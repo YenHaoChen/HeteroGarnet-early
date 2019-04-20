@@ -142,7 +142,7 @@ Topology::createLinks(Network *net)
     for (LinkMap::const_iterator i = m_link_map.begin();
          i != m_link_map.end(); ++i) {
         std::pair<int, int> src_dest = (*i).first;
-        bool vnet_done[m_vnets] = { 0 };
+        vector<bool> vnet_done(m_vnets, 0);
         int src = src_dest.first;
         int dst = src_dest.second;
 
