@@ -78,10 +78,10 @@ NetworkLink::wakeup()
     assert(curTick() == clockEdge());
     if (link_srcQueue->isReady(curTick())) {
         flit *t_flit = link_srcQueue->getTopFlit();
+        DPRINTF(RubyNetwork, "Transmission will finish at %ld :%s\n",
+                clockEdge(m_latency), *t_flit);
         if (m_type != NUM_LINK_TYPES_) {
             // Only for assertions and debug messages
-            DPRINTF(RubyNetwork, "Transmitting at %ld :%s\n",
-                clockEdge(m_latency), *t_flit);
             assert(t_flit->m_width == bitWidth);
             assert((std::find(mVnets.begin(), mVnets.end(),
                 t_flit->get_vnet()) != mVnets.end()) ||

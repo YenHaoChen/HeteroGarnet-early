@@ -223,11 +223,9 @@ NetworkInterface::wakeup()
     bool messageEnqueuedThisCycle = checkStallQueue();
 
     /*********** Check the incoming flit link **********/
-    DPRINTF(RubyNetwork, "Number of iPorts: %d\n", inPorts.size());
+    DPRINTF(RubyNetwork, "Number of input ports: %d\n", inPorts.size());
     for (auto &iPort: inPorts) {
         NetworkLink *inNetLink = iPort->inNetLink();
-        DPRINTF(RubyNetwork, "Checking input port:%s with vnets %s\n",
-            inNetLink->name(), iPort->printVnets());
         if (inNetLink->isReady(curTick())) {
             flit *t_flit = inNetLink->consumeLink();
             DPRINTF(RubyNetwork, "Recieved flit:%s\n", *t_flit);
@@ -286,8 +284,6 @@ NetworkInterface::wakeup()
 
     for (auto &oPort: outPorts) {
         CreditLink *inCreditLink = oPort->inCreditLink();
-        DPRINTF(RubyNetwork, "Checking input port:%s with vnets %s\n",
-            inCreditLink->name(), oPort->printVnets());
         if (inCreditLink->isReady(curTick())) {
             Credit *t_credit = (Credit*) inCreditLink->consumeLink();
             outVcState[t_credit->get_vc()].increment_credit();
@@ -306,7 +302,8 @@ NetworkInterface::wakeup()
     // back.
     for (auto &iPort: inPorts) {
         if (iPort->outCreditQueue()->getSize() > 0) {
-            DPRINTF(RubyNetwork, "Sending a credit via %s at %ld\n",
+            DPRINTF(RubyNetwork, "Sending a credit %s via %s at %ld\n",
+            *(iPort->outCreditQueue()->peekTopFlit()),
             iPort->outCreditLink()->name(), clockEdge(Cycles(1)));
             iPort->outCreditLink()->
                 scheduleEventAbsolute(clockEdge(Cycles(1)));

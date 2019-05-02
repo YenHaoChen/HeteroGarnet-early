@@ -93,9 +93,6 @@ void
 Router::addInPort(PortDirection inport_dirn,
                   NetworkLink *in_link, CreditLink *credit_link)
 {
-    DPRINTF(RubyNetwork, "%d == %d? %s\n", in_link->bitWidth,
-            m_bit_width, in_link->name());
-
     fatal_if(in_link->bitWidth != m_bit_width, "Widths of link %s(%d)does"
             " not match that of Router%d(%d). Consider inserting SerDes "
             "Units.", in_link->name(), in_link->bitWidth, m_id, m_bit_width);
@@ -121,11 +118,6 @@ Router::addOutPort(PortDirection outport_dirn,
                    std::vector<NetDest>& routing_table_entry, int link_weight,
                    CreditLink *credit_link, uint32_t consumerVcs)
 {
-    DPRINTF(RubyNetwork, "%d == %d? %s\n", out_link->bitWidth,
-            m_bit_width, out_link->name());
-    DPRINTF(RubyNetwork, "Consumer %s VC: %d\n", out_link->name(),
-            consumerVcs);
-
     fatal_if(out_link->bitWidth != m_bit_width, "Widths of units do not match."
             " Consider inserting SerDes Units");
 
