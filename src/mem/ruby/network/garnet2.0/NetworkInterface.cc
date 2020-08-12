@@ -220,7 +220,7 @@ NetworkInterface::wakeup()
 
     // Check if there are flits stalling a virtual channel. Track if a
     // message is enqueued to restrict ejection to one message per cycle.
-    bool messageEnqueuedThisCycle = checkStallQueue();
+    checkStallQueue();
 
     /*********** Check the incoming flit link **********/
     DPRINTF(RubyNetwork, "Number of input ports: %d\n", inPorts.size());
@@ -239,7 +239,7 @@ NetworkInterface::wakeup()
             // credits.
             if (t_flit->get_type() == TAIL_ ||
                 t_flit->get_type() == HEAD_TAIL_) {
-                if (!messageEnqueuedThisCycle &&
+                if (!iPort->messageEnqueuedThisCycle &&
                     outNode_ptr[vnet]->areNSlotsAvailable(1, curTime)) {
                     // Space is available. Enqueue to protocol buffer.
                     outNode_ptr[vnet]->enqueue(t_flit->get_msg_ptr(), curTime,
@@ -258,7 +258,7 @@ NetworkInterface::wakeup()
                     // set up a callback for when protocol buffer is dequeued.
                     // Stat update and flit pointer deletion will occur upon
                     // unstall.
-                    m_stall_queue.push_back(t_flit);
+                    iPort->m_stall_queue.push_back(t_flit);
                     m_stall_count[vnet]++;
 
                     auto cb = std::bind(&NetworkInterface::dequeueCallback,
@@ -312,55 +312,56 @@ NetworkInterface::wakeup()
     checkReschedule();
 }
 
-bool
+void
 NetworkInterface::checkStallQueue()
 {
-    bool messageEnqueuedThisCycle = false;
-    Tick curTime = clockEdge();
+    // Check all stall queues.
+    // There is one stall queue for each input link
+    for (auto &iPort: inPorts) {
+        iPort->messageEnqueuedThisCycle = false;
+        Tick curTime = clockEdge();
 
-    if (!m_stall_queue.empty()) {
-        for (auto stallIter = m_stall_queue.begin();
-             stallIter != m_stall_queue.end(); ) {
-            flit *stallFlit = *stallIter;
-            int vnet = stallFlit->get_vnet();
+        if (!iPort->m_stall_queue.empty()) {
+            for (auto stallIter = iPort->m_stall_queue.begin();
+                 stallIter != iPort->m_stall_queue.end(); ) {
+                flit *stallFlit = *stallIter;
+                int vnet = stallFlit->get_vnet();
 
-            // If we can now eject to the protocol buffer, send back credits
-            if (outNode_ptr[vnet]->areNSlotsAvailable(1, curTime)) {
-                outNode_ptr[vnet]->enqueue(stallFlit->get_msg_ptr(), curTime,
-                                           cyclesToTicks(Cycles(1)));
+                // If we can now eject to the protocol buffer,
+                // send back credits
+                if (outNode_ptr[vnet]->areNSlotsAvailable(1,
+                    curTime)) {
+                    outNode_ptr[vnet]->enqueue(stallFlit->get_msg_ptr(),
+                        curTime, cyclesToTicks(Cycles(1)));
 
-                // Send back a credit with free signal now that the VC is no
-                // longer stalled.
-                Credit *cFlit = new Credit(stallFlit->get_vc(), true,
-                                               curTick());
-                InputPort *iPort = getInportForVnet(vnet);
-                assert(iPort);
+                    // Send back a credit with free signal now that the
+                    // VC is no longer stalled.
+                    Credit *cFlit = new Credit(stallFlit->get_vc(), true,
+                                                   curTick());
+                    iPort->sendCredit(cFlit);
 
-                iPort->sendCredit(cFlit);
+                    // Update Stats
+                    incrementStats(stallFlit);
 
-                // Update Stats
-                incrementStats(stallFlit);
+                    // Flit can now safely be deleted and removed from stall
+                    // queue
+                    delete stallFlit;
+                    iPort->m_stall_queue.erase(stallIter);
+                    m_stall_count[vnet]--;
 
-                // Flit can now safely be deleted and removed from stall
-                // queue
-                delete stallFlit;
-                m_stall_queue.erase(stallIter);
-                m_stall_count[vnet]--;
+                    // If there are no more stalled messages for this vnet, the
+                    // callback on it's MessageBuffer is not needed.
+                    if (m_stall_count[vnet] == 0)
+                        outNode_ptr[vnet]->unregisterDequeueCallback();
 
-                // If there are no more stalled messages for this vnet, the
-                // callback on it's MessageBuffer is not needed.
-                if (m_stall_count[vnet] == 0)
-                    outNode_ptr[vnet]->unregisterDequeueCallback();
-
-                messageEnqueuedThisCycle = true;
-                break;
-            } else {
-                ++stallIter;
+                    iPort->messageEnqueuedThisCycle = true;
+                    break;
+                } else {
+                    ++stallIter;
+                }
             }
         }
     }
-
-    return messageEnqueuedThisCycle;
 }
 
 // Embed the protocol message into flits

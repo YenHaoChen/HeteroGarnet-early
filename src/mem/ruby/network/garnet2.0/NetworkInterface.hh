@@ -223,6 +223,9 @@ class NetworkInterface : public ClockedObject, public Consumer
                 return ss.str();
             }
 
+            // Queue for stalled flits
+            std::deque<flit *> m_stall_queue;
+            bool messageEnqueuedThisCycle;
         private:
             std::vector<int> _vnets;
             flitBuffer *_outCreditQueue;
@@ -245,8 +248,6 @@ class NetworkInterface : public ClockedObject, public Consumer
     int m_deadlock_threshold;
     std::vector<OutVcState> outVcState;
 
-    // Queue for stalled flits
-    std::deque<flit *> m_stall_queue;
     std::vector<int> m_stall_count;
 
     // Input Flit Buffers
@@ -261,7 +262,7 @@ class NetworkInterface : public ClockedObject, public Consumer
     // When a vc stays busy for a long time, it indicates a deadlock
     std::vector<int> vc_busy_counter;
 
-    bool checkStallQueue();
+    void checkStallQueue();
     bool flitisizeMessage(MsgPtr msg_ptr, int vnet);
     int calculateVC(int vnet);
 
