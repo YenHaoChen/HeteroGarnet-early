@@ -46,7 +46,7 @@ using namespace std;
 
 NetworkInterface::NetworkInterface(const Params *p)
   : ClockedObject(p), Consumer(this), m_id(p->id),
-    m_virtual_networks(p->virt_nets), m_vc_per_vnet(0),
+    m_virtual_networks(p->virt_nets), m_vc_per_vnet(0), m_num_vcs(0),
     m_vc_allocator(m_virtual_networks, 0),
     m_vc_round_robin(0),
     m_deadlock_threshold(p->garnet_deadlock_threshold),
