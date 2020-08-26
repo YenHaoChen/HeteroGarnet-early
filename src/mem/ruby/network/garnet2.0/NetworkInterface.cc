@@ -46,7 +46,7 @@ using namespace std;
 
 NetworkInterface::NetworkInterface(const Params *p)
   : ClockedObject(p), Consumer(this), m_id(p->id),
-    m_virtual_networks(p->virt_nets), m_vc_per_vnet(0), m_num_vcs(0),
+    m_virtual_networks(p->virt_nets), m_vc_per_vnet(0), m_num_vcs(0)/*YenHao*/,
     m_vc_allocator(m_virtual_networks, 0),
     m_vc_round_robin(0),
     m_deadlock_threshold(p->garnet_deadlock_threshold),
@@ -441,7 +441,8 @@ NetworkInterface::flitisizeMessage(MsgPtr msg_ptr, int vnet)
                 net_msg_ptr->getMessageSize()),
                 oPort->bitWidth(), curTick());
 
-            fl->set_src_delay(curTick() - ticksToCycles(msg_ptr->getTime()));
+            //fl->set_src_delay(curTick() - ticksToCycles(msg_ptr->getTime()));
+            fl->set_src_delay(curTick() - msg_ptr->getTime()); // YenHao, BUG!!
             niOutVcs[vc].insert(fl);
         }
 
